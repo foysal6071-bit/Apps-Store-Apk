@@ -171,10 +171,17 @@ window.addEventListener('online',retry);
         prefs = getSharedPreferences("dl", MODE_PRIVATE);
 
         // Edge-to-edge: the page draws behind a transparent status bar.
+        // The theme may ask for translucent bars (that is the grey scrim): turn that off, then draw our own transparent bars.
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= 29) {
+            getWindow().setStatusBarContrastEnforced(false);
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
 
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.WHITE);
