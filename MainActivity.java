@@ -12,6 +12,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
+import android.view.WindowManager;
 import android.provider.Settings;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -25,6 +27,7 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -149,6 +152,7 @@ window.addEventListener('online',retry);
     String lastJson = null;
     boolean polling = false;
     boolean active = false;
+    int topInsetPx = 0;
 
     final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -166,9 +170,19 @@ window.addEventListener('online',retry);
         dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
         prefs = getSharedPreferences("dl", MODE_PRIVATE);
 
+        // Edge-to-edge: the page draws behind a transparent status bar.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+
         root = new FrameLayout(this);
-        root.setFitsSystemWindows(true);
         root.setBackgroundColor(Color.WHITE);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            topInsetPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            applyInsets();
+            return insets; // not consumed, WebView sits under the bar
+        });
         setContentView(root);
 
         web = new WebView(this);
@@ -190,6 +204,7 @@ window.addEventListener('online',retry);
                 }
             }
             @Override public void onPageFinished(WebView v, String url) {
+                applyInsets();
                 push(true);
             }
         });
@@ -197,6 +212,24 @@ window.addEventListener('online',retry);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         web.loadUrl(SITE);
         hideNav();
+    }
+
+    /* Tell the page how tall the status bar is (CSS var --sat) and make the bar icons follow the page theme. */
+    void applyInsets() {
+        if (web == null) return;
+        float d = getResources().getDisplayMetrics().density;
+        String js = "(function(){try{"
+            + "document.documentElement.style.setProperty('--sat','" + (topInsetPx / d) + "px');"
+            + "if(window.__aeroBar)return;window.__aeroBar=1;"
+            + "function f(){try{var t=document.createElement('div');"
+            + "t.style.cssText='display:none;background:var(--bg,#fff)';document.documentElement.appendChild(t);"
+            + "var c=getComputedStyle(t).backgroundColor.match(/[\\d.]+/g);t.remove();"
+            + "var l=0.299*c[0]+0.587*c[1]+0.114*c[2];AeroBridge.bar(l<140);}catch(e){}}"
+            + "f();new MutationObserver(f).observe(document.documentElement,{attributes:true});"
+            + "var m=matchMedia('(prefers-color-scheme:dark)');"
+            + "if(m.addEventListener)m.addEventListener('change',f);"
+            + "}catch(e){}})()";
+        web.evaluateJavascript(js, null);
     }
 
     /* Keep the status bar visible, hide the navigation bar (swipe from the edge shows it briefly). */
@@ -243,6 +276,12 @@ window.addEventListener('online',retry);
         }
         @JavascriptInterface public void retry() {
             h.post(() -> web.loadUrl(failedUrl != null ? failedUrl : SITE));
+        }
+        @JavascriptInterface public void bar(final boolean darkPage) {
+            h.post(() -> {
+                WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+                if (c != null) c.setAppearanceLightStatusBars(!darkPage);
+            });
         }
         @JavascriptInterface public void mark(String key) {
             pendingKey = key;
