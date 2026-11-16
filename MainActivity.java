@@ -5,7 +5,6 @@ import android.app.DownloadManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -26,7 +25,6 @@ import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -34,6 +32,19 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+/**
+ * Aero Store wrapper.
+ *
+ * All download / install UI (Get button, progress ring, Downloads page) now lives in the
+ * web page so it follows the selected app theme (light / dark / green / glass).
+ * This class only does the native work and exposes it to the page as "AeroBridge":
+ *   start(url, fileName)  - download a direct link
+ *   cancel(url)           - cancel or remove a download
+ *   install(url)          - open the Android installer for a finished download
+ *   mark(url)             - remember which app a MediaFire page link belongs to
+ *   state()               - JSON of all downloads: {url:{status,pct,got,total}}
+ * and pushes changes back with window.aeroOnState(json).
+ */
 public class MainActivity extends Activity {
 
     // The build reads your link from site.txt and puts it here.
@@ -45,20 +56,18 @@ public class MainActivity extends Activity {
     SharedPreferences prefs;
     Handler h = new Handler(Looper.getMainLooper());
 
-    // Mirrors web.getUrl(). It can be read from the JS bridge thread,
-    // where calling WebView methods directly is not allowed.
-    volatile String pageUrl = "";
-    volatile String userAgent = "";
+    volatile String pendingKey = null; // app link the user tapped before a MediaFire page opened
+    String lastJson = null;
     boolean polling = false;
-    final Object lock = new Object();
+    boolean active = false;
 
-    Runnable pollTick = new Runnable() {
+    final Runnable tick = new Runnable() {
         @Override public void run() {
-            polling = false;
-            boolean active = pushState();
+            push(false);
             if (active) {
-                polling = true;
-                h.postDelayed(this, 400);
+                h.postDelayed(this, 500);
+            } else {
+                polling = false;
             }
         }
     };
@@ -77,8 +86,7 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        userAgent = s.getUserAgentString();
-
+        web.addJavascriptInterface(new Bridge(), "AeroBridge");
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 String u = r.getUrl().toString();
@@ -86,37 +94,19 @@ public class MainActivity extends Activity {
                 try { startActivity(new Intent(Intent.ACTION_VIEW, r.getUrl())); } catch (Exception e) { }
                 return true;
             }
-            @Override public void onPageStarted(WebView v, String url, Bitmap icon) {
-                pageUrl = url == null ? "" : url;
-            }
-            @Override public void doUpdateVisitedHistory(WebView v, String url, boolean isReload) {
-                pageUrl = url == null ? "" : url;
-            }
             @Override public void onPageFinished(WebView v, String url) {
-                pageUrl = url == null ? "" : url;
-                startPolling();
+                push(true);
             }
         });
-
-        // Fallback for links that are not started through AeroBridge (e.g. a MediaFire page).
-        web.setDownloadListener((url, ua, cd, mime, len) -> {
-            String name = URLUtil.guessFileName(url, cd, mime);
-            boolean ok = enqueue(url, name, ua);
-            if (ok) {
-                String cur = web.getUrl();
-                if (cur != null && cur.contains("mediafire.com") && web.canGoBack()) web.goBack();
-                startPolling();
-            }
-        });
-
-        web.addJavascriptInterface(new Bridge(), "AeroBridge");
+        web.setDownloadListener((url, ua, cd, mime, len) -> startFromWeb(url, ua, cd, mime));
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         web.loadUrl(SITE);
     }
 
     @Override protected void onResume() {
         super.onResume();
-        startPolling();
+        push(true);
+        ensurePolling();
     }
 
     @Override public void onBackPressed() {
@@ -125,216 +115,180 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        h.removeCallbacks(pollTick);
+        h.removeCallbacks(tick);
         super.onDestroy();
     }
 
-    // ---------- security ----------
+    /* ---------- bridge exposed to the web page ---------- */
 
-    static boolean isSiteUrl(String u) {
-        if (u == null) return false;
-        String base = SITE.endsWith("/") ? SITE.substring(0, SITE.length() - 1) : SITE;
-        if (!u.startsWith(base)) return false;
-        if (u.length() == base.length()) return true;
-        char c = u.charAt(base.length());
-        return c == '/' || c == '?' || c == '#';
-    }
-
-    boolean bridgeAllowed() {
-        return isSiteUrl(pageUrl);
-    }
-
-    // ---------- url -> download id map (SharedPreferences) ----------
-
-    JSONObject loadMap() {
-        try {
-            return new JSONObject(prefs.getString("map", "{}"));
-        } catch (JSONException e) {
-            return new JSONObject();
+    class Bridge {
+        @JavascriptInterface public void start(final String key, final String name) {
+            h.post(() -> startDirect(key, name));
         }
+        @JavascriptInterface public void cancel(final String key) {
+            h.post(() -> removeKey(key));
+        }
+        @JavascriptInterface public void install(final String key) {
+            h.post(() -> installKey(key));
+        }
+        @JavascriptInterface public void mark(String key) {
+            pendingKey = key;
+        }
+        @JavascriptInterface public String state() {
+            return buildState().toString();
+        }
+    }
+
+    /* ---------- key -> DownloadManager id map (survives app restarts) ---------- */
+
+    JSONObject map() {
+        try { return new JSONObject(prefs.getString("map", "{}")); }
+        catch (Exception e) { return new JSONObject(); }
     }
 
     void saveMap(JSONObject m) {
         prefs.edit().putString("map", m.toString()).apply();
     }
 
-    // ---------- download engine ----------
-
-    static String cleanName(String n) {
-        if (n == null) n = "";
-        n = n.replaceAll("[^A-Za-z0-9._-]", "_");
-        if (n.startsWith(".")) n = "_" + n;
-        if (n.isEmpty()) n = "app.apk";
-        return n;
+    File dir() {
+        return getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
     }
 
-    /** Starts (or restarts) a download keyed by url. Safe to call from any thread. */
-    boolean enqueue(String url, String fileName, String ua) {
-        if (url == null || !url.startsWith("https://")) {
-            toast("Download link must be https");
-            return false;
-        }
+    /* ---------- starting / removing downloads ---------- */
+
+    void startDirect(String key, String name) {
         try {
-            String name = cleanName(fileName);
-            synchronized (lock) {
-                JSONObject map = loadMap();
-                if (map.has(url)) {
-                    long oldId = map.optLong(url, -1);
-                    if (oldId >= 0) dm.remove(oldId);
-                    map.remove(url);
-                }
-                File old = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), name);
-                if (old.exists()) old.delete();
-
-                DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url));
-                String agent = (ua == null || ua.isEmpty()) ? userAgent : ua;
-                if (agent != null && !agent.isEmpty()) r.addRequestHeader("User-Agent", agent);
-                String ck = CookieManager.getInstance().getCookie(url);
-                if (ck != null) r.addRequestHeader("Cookie", ck);
-                r.setTitle(name);
-                r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                r.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name);
-                long id = dm.enqueue(r);
-
-                map.put(url, id);
-                saveMap(map);
-            }
-            return true;
+            File old = new File(dir(), name);
+            if (old.exists()) old.delete();
+            DownloadManager.Request r = new DownloadManager.Request(Uri.parse(key));
+            r.setTitle(name);
+            r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            r.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name);
+            enqueue(key, r);
         } catch (Exception e) {
-            toast("Download failed to start");
-            return false;
+            Toast.makeText(this, "Download failed to start", Toast.LENGTH_LONG).show();
         }
     }
 
-    void cancelDownload(String url) {
-        synchronized (lock) {
-            JSONObject map = loadMap();
-            if (map.has(url)) {
-                long id = map.optLong(url, -1);
-                if (id >= 0) {
-                    try { dm.remove(id); } catch (Exception e) { }
-                }
-                map.remove(url);
-                saveMap(map);
-            }
-        }
-    }
-
-    /** Returns the local file for a finished download, or null. */
-    File localFile(String url) {
-        long id;
-        synchronized (lock) {
-            id = loadMap().optLong(url, -1);
-        }
-        if (id < 0) return null;
-        Cursor c = dm.query(new DownloadManager.Query().setFilterById(id));
-        if (c == null) return null;
+    // MediaFire (and any other page) hands the file to the WebView's download listener.
+    void startFromWeb(String url, String ua, String cd, String mime) {
+        String name = URLUtil.guessFileName(url, cd, mime);
+        String key = pendingKey != null ? pendingKey : url;
+        pendingKey = null;
         try {
-            if (!c.moveToFirst()) return null;
-            int st = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
-            if (st != DownloadManager.STATUS_SUCCESSFUL) return null;
-            String local = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
-            if (local == null) return null;
-            String path = Uri.parse(local).getPath();
-            if (path == null) return null;
-            File f = new File(path);
-            return f.exists() ? f : null;
-        } finally {
-            c.close();
+            File old = new File(dir(), name);
+            if (old.exists()) old.delete();
+            DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url));
+            if (ua != null) r.addRequestHeader("User-Agent", ua);
+            String ck = CookieManager.getInstance().getCookie(url);
+            if (ck != null) r.addRequestHeader("Cookie", ck);
+            r.setTitle(name);
+            r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            r.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, name);
+            enqueue(key, r);
+        } catch (Exception e) {
+            Toast.makeText(this, "Download failed to start", Toast.LENGTH_LONG).show();
         }
+        String cur = web.getUrl();
+        if (cur != null && cur.contains("mediafire.com") && web.canGoBack()) web.goBack();
     }
 
-    /** Builds the {url: {status,pct,got,total}} map. Drops entries whose download or file is gone. */
+    void enqueue(String key, DownloadManager.Request r) {
+        JSONObject m = map();
+        long prev = m.optLong(key, -1);
+        if (prev >= 0) dm.remove(prev);
+        long id = dm.enqueue(r);
+        try { m.put(key, id); } catch (Exception e) { }
+        saveMap(m);
+        push(true);
+        ensurePolling();
+    }
+
+    void removeKey(String key) {
+        JSONObject m = map();
+        long id = m.optLong(key, -1);
+        if (id >= 0) dm.remove(id);
+        m.remove(key);
+        saveMap(m);
+        push(true);
+    }
+
+    /* ---------- state -> web page ---------- */
+
     JSONObject buildState() {
+        JSONObject m = map();
         JSONObject out = new JSONObject();
-        synchronized (lock) {
-            JSONObject map = loadMap();
-            List<String> gone = new ArrayList<>();
-            Iterator<String> it = map.keys();
-            while (it.hasNext()) {
-                String url = it.next();
-                long id = map.optLong(url, -1);
-                Cursor c = null;
-                try {
-                    if (id >= 0) c = dm.query(new DownloadManager.Query().setFilterById(id));
-                    if (c == null || !c.moveToFirst()) { gone.add(url); continue; }
-                    int st = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
-                    long got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
-                    long tot = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
-                    String status;
-                    int pct = 0;
-                    if (tot > 0) pct = (int) Math.min(100L, got * 100L / tot);
-                    if (st == DownloadManager.STATUS_SUCCESSFUL) {
-                        String local = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
-                        String path = local == null ? null : Uri.parse(local).getPath();
-                        if (path == null || !new File(path).exists()) { gone.add(url); continue; }
-                        status = "done";
-                        pct = 100;
-                    } else if (st == DownloadManager.STATUS_FAILED) {
-                        status = "failed";
-                    } else if (st == DownloadManager.STATUS_PAUSED) {
-                        status = "paused";
-                    } else {
-                        status = "running";
-                    }
-                    JSONObject o = new JSONObject();
-                    o.put("status", status);
-                    o.put("pct", pct);
-                    o.put("got", got);
-                    o.put("total", tot > 0 ? tot : 0);
-                    out.put(url, o);
-                } catch (Exception e) {
-                    gone.add(url);
-                } finally {
-                    if (c != null) c.close();
-                }
-            }
-            if (!gone.isEmpty()) {
-                for (String g : gone) map.remove(g);
-                saveMap(map);
+        List<String> keys = new ArrayList<>();
+        Iterator<String> it = m.keys();
+        while (it.hasNext()) keys.add(it.next());
+
+        boolean act = false, dirty = false;
+        for (String k : keys) {
+            long id = m.optLong(k, -1);
+            Cursor c = id < 0 ? null : dm.query(new DownloadManager.Query().setFilterById(id));
+            try {
+                if (c == null || !c.moveToFirst()) { m.remove(k); dirty = true; continue; }
+                int st = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                long got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                long tot = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+                String status;
+                if (st == DownloadManager.STATUS_SUCCESSFUL) status = "done";
+                else if (st == DownloadManager.STATUS_FAILED) status = "failed";
+                else if (st == DownloadManager.STATUS_PAUSED) { status = "paused"; act = true; }
+                else { status = "running"; act = true; }
+                int pct = tot > 0 ? (int) Math.min(100, got * 100 / tot) : 0;
+                JSONObject o = new JSONObject();
+                o.put("status", status);
+                o.put("pct", pct);
+                o.put("got", got);
+                o.put("total", tot);
+                out.put(k, o);
+            } catch (Exception e) {
+                // skip this entry
+            } finally {
+                if (c != null) c.close();
             }
         }
+        if (dirty) saveMap(m);
+        active = act;
         return out;
     }
 
-    static boolean hasActive(JSONObject state) {
-        Iterator<String> it = state.keys();
-        while (it.hasNext()) {
-            JSONObject o = state.optJSONObject(it.next());
-            if (o == null) continue;
-            String st = o.optString("status");
-            if ("running".equals(st) || "paused".equals(st)) return true;
+    void push(boolean force) {
+        if (web == null) return;
+        String json = buildState().toString();
+        if (!force && json.equals(lastJson)) return;
+        lastJson = json;
+        web.evaluateJavascript("window.aeroOnState&&window.aeroOnState(" + json + ")", null);
+    }
+
+    void ensurePolling() {
+        if (polling) return;
+        polling = true;
+        h.removeCallbacks(tick);
+        h.postDelayed(tick, 500);
+    }
+
+    /* ---------- install ---------- */
+
+    void installKey(String key) {
+        long id = map().optLong(key, -1);
+        if (id < 0) return;
+        Cursor c = dm.query(new DownloadManager.Query().setFilterById(id));
+        String local = null;
+        try {
+            if (c != null && c.moveToFirst()
+                    && c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) == DownloadManager.STATUS_SUCCESSFUL) {
+                local = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI));
+            }
+        } finally {
+            if (c != null) c.close();
         }
-        return false;
+        install(local);
     }
 
-    /** Main thread only. Pushes state to the store page. Returns true while any download is active. */
-    boolean pushState() {
-        JSONObject st = buildState();
-        if (isSiteUrl(web.getUrl())) {
-            String json = st.toString().replace("\u2028", "\\u2028").replace("\u2029", "\\u2029");
-            web.evaluateJavascript("window.aeroOnState&&window.aeroOnState(" + json + ")", null);
-        }
-        return hasActive(st);
-    }
-
-    /** Push once now and keep polling every 400 ms while something is downloading. */
-    void startPolling() {
-        h.removeCallbacks(pollTick);
-        h.post(pollTick);
-    }
-
-    void toast(final String msg) {
-        h.post(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show());
-    }
-
-    void doInstall(String url) {
-        File f = localFile(url);
-        if (f == null) {
-            toast("File not found. Please download again.");
-            startPolling();
-            return;
-        }
+    void install(String localUri) {
+        if (localUri == null) return;
         if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
             Toast.makeText(this, "Allow installs from this app, then tap Install again", Toast.LENGTH_LONG).show();
             startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -342,6 +296,7 @@ public class MainActivity extends Activity {
             return;
         }
         try {
+            File f = new File(Uri.parse(localUri).getPath());
             Uri u = FileProvider.getUriForFile(this, getPackageName() + ".fp", f);
             Intent i = new Intent(Intent.ACTION_VIEW);
             i.setDataAndType(u, "application/vnd.android.package-archive");
@@ -349,41 +304,6 @@ public class MainActivity extends Activity {
             startActivity(i);
         } catch (Exception e) {
             Toast.makeText(this, "Could not open installer", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    // ---------- JS bridge ----------
-
-    class Bridge {
-        @JavascriptInterface
-        public void start(final String url, final String fileName) {
-            if (!bridgeAllowed()) return;
-            if (url == null || !url.startsWith("https://")) return;
-            new Thread(() -> {
-                enqueue(url, fileName, userAgent);
-                startPolling();
-            }).start();
-        }
-
-        @JavascriptInterface
-        public void cancel(final String url) {
-            if (!bridgeAllowed() || url == null) return;
-            new Thread(() -> {
-                cancelDownload(url);
-                startPolling();
-            }).start();
-        }
-
-        @JavascriptInterface
-        public void install(final String url) {
-            if (!bridgeAllowed() || url == null) return;
-            h.post(() -> doInstall(url));
-        }
-
-        @JavascriptInterface
-        public String state() {
-            if (!bridgeAllowed()) return "{}";
-            return buildState().toString();
         }
     }
 }
