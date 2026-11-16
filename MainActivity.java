@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.provider.Settings;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -187,6 +188,8 @@ window.addEventListener('online',retry);
         root.setBackgroundColor(Color.WHITE);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             topInsetPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            // keep the page above the on-screen keyboard
+            root.setPadding(0, 0, 0, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
             applyInsets();
             return insets; // not consumed, WebView sits under the bar
         });
@@ -283,6 +286,13 @@ window.addEventListener('online',retry);
         }
         @JavascriptInterface public void retry() {
             h.post(() -> web.loadUrl(failedUrl != null ? failedUrl : SITE));
+        }
+        @JavascriptInterface public void showKeyboard() {
+            h.post(() -> {
+                web.requestFocus();
+                InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(web, InputMethodManager.SHOW_IMPLICIT);
+            });
         }
         @JavascriptInterface public void bar(final boolean darkPage) {
             h.post(() -> {
