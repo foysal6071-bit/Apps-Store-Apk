@@ -171,21 +171,10 @@ window.addEventListener('online',retry);
         dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
         prefs = getSharedPreferences("dl", MODE_PRIVATE);
 
-        // Edge-to-edge: the page draws behind a transparent status bar.
-        // The theme may ask for translucent bars (that is the grey scrim): turn that off, then draw our own transparent bars.
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
-                | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        if (Build.VERSION.SDK_INT >= 29) {
-            getWindow().setStatusBarContrastEnforced(false);
-            getWindow().setNavigationBarContrastEnforced(false);
-        }
+        transparentBars();
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.WHITE);
+        root.setBackgroundColor(Color.TRANSPARENT);
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             topInsetPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
             // keep the page above the on-screen keyboard
@@ -194,6 +183,7 @@ window.addEventListener('online',retry);
             return insets; // not consumed, WebView sits under the bar
         });
         setContentView(root);
+        transparentBars(); // again after the content view exists
 
         web = new WebView(this);
         WebSettings s = web.getSettings();
@@ -224,6 +214,34 @@ window.addEventListener('online',retry);
         hideNav();
     }
 
+    /* Fully transparent status/navigation bars (no grey scrim); page draws behind them, icons stay visible. */
+    void transparentBars() {
+        android.view.Window w = getWindow();
+        w.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS
+                | WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
+        w.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+        WindowCompat.setDecorFitsSystemWindows(w, false);
+        // legacy flags: some OEM skins (MIUI etc.) only honour these for a truly transparent bar
+        // applied on every SDK (not only < 30): MIUI / One UI still need it on Android 11+
+        View dv = w.getDecorView();
+        dv.setSystemUiVisibility(dv.getSystemUiVisibility()
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        // draw into the notch / cutout area so no black strip appears behind the status bar
+        if (Build.VERSION.SDK_INT >= 28) {
+            w.getAttributes().layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+        w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        w.setStatusBarColor(Color.TRANSPARENT);
+        w.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= 29) {
+            w.setStatusBarContrastEnforced(false);
+            w.setNavigationBarContrastEnforced(false);
+        }
+    }
+
     /* Tell the page how tall the status bar is (CSS var --sat) and make the bar icons follow the page theme. */
     void applyInsets() {
         if (web == null) return;
@@ -252,11 +270,12 @@ window.addEventListener('online',retry);
 
     @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) hideNav();
+        if (hasFocus) { transparentBars(); hideNav(); }
     }
 
     @Override protected void onResume() {
         super.onResume();
+        transparentBars();
         hideNav();
         push(true);
         ensurePolling();
