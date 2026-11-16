@@ -24,6 +24,9 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import org.json.JSONObject;
 
@@ -101,10 +104,25 @@ public class MainActivity extends Activity {
         web.setDownloadListener((url, ua, cd, mime, len) -> startFromWeb(url, ua, cd, mime));
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         web.loadUrl(SITE);
+        hideNav();
+    }
+
+    /* Keep the status bar visible, hide the navigation bar (swipe from the edge shows it briefly). */
+    void hideNav() {
+        WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (c == null) return;
+        c.hide(WindowInsetsCompat.Type.navigationBars());
+        c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideNav();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        hideNav();
         push(true);
         ensurePolling();
     }
