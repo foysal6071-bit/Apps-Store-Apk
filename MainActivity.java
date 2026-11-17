@@ -840,8 +840,24 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         return false;
     }
 
-    /* asks adbd (over the connection that is open now) to also listen on the TCP port; adbd restarts, so the connection ends */
+    /* runs one shell command over the open connection and returns what it printed */
+    String shell(AdbManager m, String cmd) {
+        AdbStream st = null;
+        try {
+            st = m.openStream("shell:" + cmd);
+            return readAll(st.openInputStream());
+        } catch (Throwable t) {
+            return "";
+        } finally {
+            try { if (st != null) st.close(); } catch (Throwable t) { }
+        }
+    }
+
+    /* asks adbd (over the connection that is open now) to also listen on the TCP port; adbd restarts, so the connection ends.
+       Before that, USB debugging is switched on: while it is on, Android keeps adbd (and so the TCP port) running even
+       when Wi-Fi is turned off, so nobody has to pair again after Wi-Fi off / on. */
     void switchToTcp(AdbManager m, int port) {
+        shell(m, "settings put global adb_enabled 1");
         AdbStream st = null;
         try {
             st = m.openStream("tcpip:" + port);
@@ -856,7 +872,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
     boolean connectAdb(AdbManager m) throws Exception {
         final boolean tcp = tcpOn();
         final int port = prefs.getInt("tcpport", 5555);
-        if (tcp && connectTcp(m, port, 1)) return true;
+        if (tcp && connectTcp(m, port, 2)) return true;
         if (!m.autoConnect(this, 10000)) return false;
         if (tcp) {
             switchToTcp(m, port);
