@@ -872,6 +872,25 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         return sent;
     }
 
+    /* true when Wi-Fi (or a hotspot) has an IPv4 address; if the check itself fails it says true, so it never blocks by mistake */
+    boolean wifiUp() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> en = java.net.NetworkInterface.getNetworkInterfaces();
+            while (en != null && en.hasMoreElements()) {
+                java.net.NetworkInterface ni = en.nextElement();
+                String n = ni.getName();
+                if (n == null || !ni.isUp() || !(n.startsWith("wlan") || n.startsWith("swlan") || n.startsWith("ap"))) continue;
+                java.util.Enumeration<java.net.InetAddress> ad = ni.getInetAddresses();
+                while (ad.hasMoreElements()) {
+                    if (ad.nextElement() instanceof java.net.Inet4Address) return true;
+                }
+            }
+            return false;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
     /* USB debugging switch in Developer options; readable by any app */
     boolean usbDebuggingOn() {
         try { return Settings.Global.getInt(getContentResolver(), Settings.Global.ADB_ENABLED, 0) == 1; }
@@ -884,22 +903,31 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         viaTcp = false;
         tcpNote = "";
         if (tcp && connectTcp(m, port, 2)) { viaTcp = true; return true; }
+        // The TCP port is closed. Opening it the first time (and again after every reboot) needs ONE Wireless debugging
+        // connection, and that needs Wi-Fi. Without Wi-Fi the search below only ends in "Timed out while trying to find
+        // a valid host address", so say the real reason at once instead of waiting 10 s.
+        if (!wifiUp()) {
+            tcpNote = "no Wi-Fi";
+            throw new Exception(tcp
+                    ? "TCP port " + port + " is closed and there is no Wi-Fi. Connect to Wi-Fi once with Wireless debugging on."
+                    : "No Wi-Fi. Connect to Wi-Fi and turn on Wireless debugging.");
+        }
         if (!m.autoConnect(this, 10000)) return false;
         if (!tcp) return true;
+        // 1) USB debugging ON, while Wi-Fi is still there. When Wi-Fi goes off Android switches Wireless debugging off,
+        //    and with USB debugging off too it stops adbd completely, so the TCP port dies with it.
+        //    That is why TCP stopped working after Wi-Fi off. This can make adbd restart, so it is checked afterwards.
+        if (!usbDebuggingOn()) {
+            shell(m, "settings put global adb_enabled 1");
+            try { Thread.sleep(1500); } catch (InterruptedException e) { return false; }
+            if (!usbDebuggingOn()) tcpNote = "could not switch USB debugging on";
+        }
+        // 2) open the TCP port; if the connection was cut in step 1, connect over Wireless again and retry once
         boolean sent = switchToTcp(m, port);
+        if (!sent && wifiUp() && m.autoConnect(this, 10000)) { tcpNote = ""; sent = switchToTcp(m, port); }
         // adbd needs a few seconds to restart on the new port (8 tries x 0.5 s was too short on slower phones)
         if (sent && connectTcp(m, port, 20)) {
             viaTcp = true;
-            // While USB debugging is on, Android keeps adbd (and so the TCP port) alive even when Wi-Fi is turned off.
-            // Done now, over the TCP connection, and only when it is still off.
-            if (!usbDebuggingOn()) {
-                shell(m, "settings put global adb_enabled 1");
-                if (!m.isConnected() && !connectTcp(m, port, 10)) {
-                    viaTcp = false;
-                    tcpNote = "the connection dropped after switching USB debugging on";
-                    return m.autoConnect(this, 10000);
-                }
-            }
             return true;
         }
         if (sent && tcpNote.isEmpty()) {
@@ -924,7 +952,11 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
                 try {
                     AdbManager m = AdbManager.get(this);
                     try { if (m.isConnected()) m.disconnect(); } catch (Throwable t) { }
-                    ok = ensureAdb(m);
+                    // right after pairing, Android needs a few seconds before it accepts the first connection
+                    for (int a = 0; a < 3 && !ok; a++) {
+                        ok = ensureAdb(m);
+                        if (!ok && a < 2) { try { Thread.sleep(2500); } catch (InterruptedException e) { break; } }
+                    }
                     if (!ok) msg = "Turn on Wireless debugging and connect to Wi-Fi first.";
                 } catch (Throwable t) {
                     msg = String.valueOf(t.getMessage());
@@ -935,7 +967,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
             final String fmsg = msg.isEmpty() ? tcpNote : msg;
             // "on" only when the connection really is the TCP one (before: any Wireless connection said "TCP mode on")
             h.post(() -> Toast.makeText(this, !fok ? "TCP mode failed" + (fmsg.isEmpty() ? "" : ": " + fmsg)
-                    : ftcp ? "TCP mode on, port " + port
+                    : ftcp ? "TCP mode on, port " + port + ". You can turn Wi-Fi off now."
                     : "TCP mode did not start, still using Wireless debugging" + (fmsg.isEmpty() ? "" : ": " + fmsg),
                     Toast.LENGTH_LONG).show());
         }).start();
