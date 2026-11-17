@@ -86,78 +86,62 @@ public class MainActivity extends Activity {
 <title>Aero Run</title>
 <style>
 :root{
-  --bg:#f3f4f8;--surface:#fff;--ink:#0f1222;--mute:#6a6f85;--line:#e4e6ef;
-  --brand:#4b3df2;--on-brand:#fff;--accent:#ffb84d;--danger:#ef6478;--ok:#1fa971;
-  --shadow:0 14px 40px rgba(15,18,34,.08);
+  --bg:#f5f6fa;--surface:#fff;--ink:#12141f;--mute:#6b7085;--line:#e3e5ee;
+  --brand:#4b3df2;--on-brand:#fff;--accent:#f5b041;--danger:#e5586b;--ok:#1fa971;
   color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0d17;--surface:#141828;--ink:#eef0fa;--mute:#9aa1ba;--line:#232844;--brand:#7b6dff;--on-brand:#0b0d17;--shadow:0 14px 40px rgba(0,0,0,.35);color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0b0d17;--surface:#141828;--ink:#eef0fa;--mute:#9aa1ba;--line:#232844;--brand:#7b6dff;--on-brand:#0b0d17;--shadow:0 14px 40px rgba(0,0,0,.35);color-scheme:dark}
-:root[data-theme="green"]{--bg:#07140e;--surface:#0e2017;--ink:#e8f6ee;--mute:#8fb5a0;--line:#1b3a2a;--brand:#2fc77a;--on-brand:#04130b;--accent:#b5ed75;--shadow:0 14px 40px rgba(0,0,0,.4);color-scheme:dark}
-:root[data-theme="glass"]{--bg:#090a18;--surface:rgba(255,255,255,.08);--ink:#f3f4ff;--mute:#a9aecb;--line:rgba(255,255,255,.16);--brand:#9a8cff;--on-brand:#0b0d17;--accent:#ff8fc2;--shadow:0 14px 40px rgba(0,0,0,.4);color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d0f19;--surface:#161a2a;--ink:#eef0fa;--mute:#98a0ba;--line:#252a45;--brand:#7b6dff;--on-brand:#0d0f19;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d0f19;--surface:#161a2a;--ink:#eef0fa;--mute:#98a0ba;--line:#252a45;--brand:#7b6dff;--on-brand:#0d0f19;color-scheme:dark}
+:root[data-theme="green"]{--bg:#08150f;--surface:#0f2218;--ink:#e8f6ee;--mute:#8fb5a0;--line:#1c3b2b;--brand:#2fc77a;--on-brand:#04130b;--accent:#b5ed75;color-scheme:dark}
+:root[data-theme="glass"]{--bg:#0a0b19;--surface:#15162a;--ink:#f3f4ff;--mute:#a9aecb;--line:#2a2c4a;--brand:#9a8cff;--on-brand:#0b0d17;--accent:#ff8fc2;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden}
-body{
-  font-family:'Plus Jakarta Sans','Hind Siliguri',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  background:var(--bg);color:var(--ink);line-height:1.4;touch-action:manipulation;
-  -webkit-user-select:none;user-select:none;
-}
-body:before{content:"";position:fixed;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse at 0% 0%,color-mix(in srgb,var(--brand) 14%,transparent),transparent 50%),
-             radial-gradient(ellipse at 100% 100%,color-mix(in srgb,var(--accent) 11%,transparent),transparent 45%)}
-:root[data-theme="glass"] body:before{background:radial-gradient(circle at 12% 8%,#7c5cff66,transparent 45%),radial-gradient(circle at 92% 92%,#ff5fa855,transparent 45%)}
-.app{position:relative;z-index:1;height:100%;max-width:560px;margin:0 auto;display:flex;flex-direction:column;
-  padding:calc(14px + var(--sat,env(safe-area-inset-top,0px))) 16px calc(14px + env(safe-area-inset-bottom,0px))}
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-.brand{display:flex;align-items:center;gap:12px;min-width:0}
-.logo{width:46px;height:46px;flex:none;border-radius:15px;box-shadow:0 8px 20px color-mix(in srgb,var(--brand) 30%,transparent)}
-h1{font-size:20px;line-height:1.1;margin:0;font-weight:800;letter-spacing:-.4px}
-.sub{font-size:12px;color:var(--mute);margin-top:3px;font-weight:500}
-.chip{flex:none;display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:var(--mute);
-  border:1px solid var(--line);background:var(--surface);padding:7px 11px;border-radius:99px}
-.chip i{width:7px;height:7px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 0 color-mix(in srgb,var(--danger) 55%,transparent);animation:pl 1.8s infinite}
-.chip.on i{background:var(--ok);animation:none}
-@keyframes pl{70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
-.card{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:26px;padding:12px;box-shadow:var(--shadow)}
-:root[data-theme="glass"] .card{-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%)}
-.hud{display:flex;gap:10px;margin-bottom:10px}
-.pill{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;border-radius:15px;
-  background:color-mix(in srgb,var(--brand) 8%,transparent);border:1px solid color-mix(in srgb,var(--brand) 14%,transparent)}
-.pill span{font-size:10.5px;font-weight:800;letter-spacing:.9px;color:var(--mute)}
-.pill b{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+body{font-family:'Plus Jakarta Sans','Hind Siliguri',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.45;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.app{height:100%;max-width:520px;margin:0 auto;display:flex;flex-direction:column;
+  padding:calc(16px + var(--sat,env(safe-area-inset-top,0px))) 20px calc(18px + env(safe-area-inset-bottom,0px))}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{width:34px;height:34px;flex:none;border-radius:10px}
+.name{font-size:16px;font-weight:700;letter-spacing:-.2px}
+.chip{flex:none;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--mute)}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--danger)}
+.chip.on{color:var(--ok)}
+.chip.on i{background:var(--ok)}
+.msg{margin:22px 0 16px}
+.msg h1{margin:0 0 6px;font-size:24px;font-weight:800;letter-spacing:-.5px}
+.msg p{margin:0;font-size:14px;color:var(--mute)}
+.card{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:14px}
+.hud{display:flex;justify-content:space-between;align-items:baseline;margin:0 2px 10px}
+.pill{display:flex;align-items:baseline;gap:8px}
+.pill span{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--mute)}
+.pill b{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
 .pill.best b{color:var(--brand)}
-.stage{position:relative;flex:1;min-height:210px;border-radius:19px;overflow:hidden;border:1px solid var(--line);touch-action:none;cursor:pointer}
+.stage{position:relative;flex:1;min-height:200px;border-radius:14px;overflow:hidden;border:1px solid var(--line);touch-action:none;cursor:pointer}
 canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-.pz{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
-  background:color-mix(in srgb,var(--surface) 82%,transparent);color:var(--ink);display:grid;place-items:center;padding:0;cursor:pointer;
-  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-.pz svg{width:16px;height:16px;fill:currentColor}
+.pz{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0;cursor:pointer}
+.pz svg{width:14px;height:14px;fill:currentColor}
 .pz[hidden]{display:none}
-.pz:active{transform:scale(.92)}
-.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;
-  background:color-mix(in srgb,var(--bg) 52%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:opacity .25s}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;background:color-mix(in srgb,var(--bg) 60%,transparent);transition:opacity .2s}
 .overlay.hidden{opacity:0;pointer-events:none}
-.panel{width:100%;max-width:300px;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:20px 18px 18px;box-shadow:var(--shadow)}
-.panel .big{width:62px;height:62px;border-radius:20px;margin:0 auto 12px;display:block;box-shadow:0 10px 24px color-mix(in srgb,var(--brand) 32%,transparent)}
-.panel h2{margin:0 0 5px;font-size:22px;font-weight:800;letter-spacing:-.5px}
-.panel p{margin:0 0 16px;font-size:13px;color:var(--mute);line-height:1.5}
+.panel{width:100%;max-width:260px;text-align:center}
+.panel h2{margin:0 0 4px;font-size:20px;font-weight:800;letter-spacing:-.3px}
+.panel p{margin:0 0 16px;font-size:13px;color:var(--mute)}
 .res{display:none;gap:8px;margin:0 0 14px}
 .res.on{display:flex}
-.res div{flex:1;border-radius:14px;padding:9px 6px;background:color-mix(in srgb,var(--brand) 8%,transparent)}
-.res small{display:block;font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--mute)}
-.res b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
-.nb{display:none;margin:0 auto 12px;width:max-content;font-size:11px;font-weight:800;letter-spacing:.4px;padding:5px 11px;border-radius:99px;background:var(--accent);color:#2a1c00}
+.res div{flex:1;border-radius:12px;padding:8px 6px;background:var(--surface);border:1px solid var(--line)}
+.res small{display:block;font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--mute)}
+.res b{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.nb{display:none;margin:0 auto 10px;width:max-content;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--accent);color:#2a1c00}
 .nb.on{display:block}
-.btn{font:inherit;font-weight:700;font-size:15px;cursor:pointer;border:0;border-radius:99px;padding:13px 26px;background:var(--brand);color:var(--on-brand);
-  box-shadow:0 8px 20px color-mix(in srgb,var(--brand) 30%,transparent);transition:transform .12s}
-.btn:active{transform:scale(.96)}
+.btn{font:inherit;font-weight:700;font-size:15px;cursor:pointer;border:0;border-radius:12px;padding:12px 26px;background:var(--brand);color:var(--on-brand);transition:transform .1s}
+.btn:active{transform:scale(.97)}
 .panel .btn{width:100%}
-.hint{font-size:11.5px;color:var(--mute);text-align:center;margin:11px 0 10px;font-weight:500}
-.rc{font:inherit;font-weight:700;font-size:14px;cursor:pointer;width:100%;padding:13px 18px;border-radius:99px;background:transparent;color:var(--brand);
-  border:0;box-shadow:inset 0 0 0 1.5px currentColor;transition:background .2s,color .2s,transform .12s}
+.hint{font-size:12px;color:var(--mute);text-align:center;margin:12px 0}
+.rc{font:inherit;font-weight:700;font-size:15px;cursor:pointer;width:100%;padding:14px 18px;border-radius:12px;background:var(--brand);color:var(--on-brand);border:0;transition:transform .1s,background .2s}
 .rc:active{transform:scale(.98)}
-.rc.on{background:var(--brand);color:var(--on-brand);box-shadow:0 8px 20px color-mix(in srgb,var(--brand) 30%,transparent)}
-@media (max-height:620px){.sub,.hint{display:none}.top{margin-bottom:10px}}
+.rc.on{background:var(--ok);color:#fff}
+@media (max-height:620px){.msg p,.hint{display:none}.msg{margin:14px 0 10px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -180,10 +164,15 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   <header class="top">
     <div class="brand">
       <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><use href="#logo"/></svg>
-      <div><h1>Aero Run</h1><div class="sub">Offline game</div></div>
+      <span class="name">Aero Store</span>
     </div>
-    <div class="chip" id="chip"><i></i><span id="chipT">No connection</span></div>
+    <div class="chip" id="chip"><i></i><span id="chipT">Offline</span></div>
   </header>
+
+  <section class="msg">
+    <h1>You're offline</h1>
+    <p>Check your Wi-Fi or mobile data. Play a quick game while you wait.</p>
+  </section>
 
   <section class="card">
     <div class="hud">
@@ -197,10 +186,9 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
       </button>
       <div class="overlay" id="overlay">
         <div class="panel">
-          <svg class="big" viewBox="0 0 100 100" aria-hidden="true"><use href="#logo"/></svg>
           <div class="nb" id="nb">NEW BEST</div>
           <h2 id="headline">Ready to run?</h2>
-          <p id="message">Jump over the parcels and collect the download coins.</p>
+          <p id="message">Jump over the parcels and collect the coins.</p>
           <div class="res" id="res"><div><small>SCORE</small><b id="rs">0</b></div><div><small>BEST</small><b id="rb">0</b></div></div>
           <button class="btn" id="start" type="button">Play</button>
         </div>
@@ -208,8 +196,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
     </div>
   </section>
 
-  <p class="hint">Tap the game area to jump &middot; hold for a higher jump</p>
-  <button class="rc" id="reconnect" type="button">Try to reconnect</button>
+  <p class="hint">Tap to jump &middot; hold to jump higher</p>
+  <button class="rc" id="reconnect" type="button">Try again</button>
 </main>
 
 <script>
@@ -224,8 +212,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* ---- reconnect ---- */
   var rc=document.getElementById('reconnect'),chip=document.getElementById('chip'),chipT=document.getElementById('chipT');
   rc.addEventListener('click',function(){try{AeroBridge.retry()}catch(e){location.reload()}});
-  function online(){rc.classList.add('on');rc.textContent="You're back online \\u00b7 Open Aero Store";chip.classList.add('on');chipT.textContent='Back online'}
-  function offline(){rc.classList.remove('on');rc.textContent='Try to reconnect';chip.classList.remove('on');chipT.textContent='No connection'}
+  function online(){rc.classList.add('on');rc.textContent="Back online \\u00b7 Open Aero Store";chip.classList.add('on');chipT.textContent='Back online'}
+  function offline(){rc.classList.remove('on');rc.textContent='Try again';chip.classList.remove('on');chipT.textContent='Offline'}
   addEventListener('online',online);addEventListener('offline',offline);
 
   /* ---- canvas helpers ---- */
@@ -348,7 +336,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
   function showOverlay(kind){
     overlay.classList.remove('hidden');pauseBtn.hidden=true;
     res.classList.toggle('on',kind==='over');nb.classList.remove('on');
-    if(kind==='ready'){headline.textContent='Ready to run?';message.textContent='Jump over the parcels and collect the download coins.';startBtn.textContent='Play'}
+    if(kind==='ready'){headline.textContent='Ready to run?';message.textContent='Jump over the parcels and collect the coins.';startBtn.textContent='Play'}
     if(kind==='pause'){headline.textContent='Paused';message.textContent='Take a break. Your run is waiting.';startBtn.textContent='Resume'}
   }
   function start(){
@@ -468,7 +456,8 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
     final Runnable tick = new Runnable() {
         @Override public void run() {
             push(false);
-            if (active) {
+            // keep pushing while an install is running too, so the button keeps saying "Installing..."
+            if (active || !installing.isEmpty()) {
                 h.postDelayed(this, 500);
             } else {
                 polling = false;
@@ -678,6 +667,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         @JavascriptInterface public boolean isPaired() {
             return prefs.getBoolean("wpaired", false);
         }
+        /* true when finished downloads install by themselves (Wireless debugging ready): the page then shows "Installing..." at once */
+        @JavascriptInterface public boolean isSilent() {
+            return silentReady();
+        }
         @JavascriptInterface public String getInstallMode() {
             return installMode();
         }
@@ -708,8 +701,11 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
             return o.toString();
         }
         @JavascriptInterface public void setTcpMode(final boolean on) {
+            // saved right now (not inside h.post): the page re-reads getWirelessOpts() the moment this returns,
+            // so a delayed write made the switch show the old value and look broken
+            prefs.edit().putBoolean("tcp", on).apply();
             h.post(() -> {
-                prefs.edit().putBoolean("tcp", on).apply();
+                optsRefresh();
                 if (on) applyTcp();
             });
         }
@@ -853,33 +849,63 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         }
     }
 
+    /* true when the open connection is the TCP one, and the reason when TCP mode could not start (shown in a toast) */
+    volatile boolean viaTcp = false;
+    volatile String tcpNote = "";
+
     /* asks adbd (over the connection that is open now) to also listen on the TCP port; adbd restarts, so the connection ends.
-       Before that, USB debugging is switched on: while it is on, Android keeps adbd (and so the TCP port) running even
-       when Wi-Fi is turned off, so nobody has to pair again after Wi-Fi off / on. */
-    void switchToTcp(AdbManager m, int port) {
-        shell(m, "settings put global adb_enabled 1");
+       Returns true when the request was sent. "tcpip" goes FIRST: the old order ran "settings put global adb_enabled 1"
+       before it, and that can make Android restart adbd and cut the connection, so "tcpip" was never sent at all. */
+    boolean switchToTcp(AdbManager m, int port) {
+        boolean sent = false;
         AdbStream st = null;
         try {
             st = m.openStream("tcpip:" + port);
+            sent = true;
             try { readAll(st.openInputStream()); } catch (Throwable ignore) { } // adbd restarts, the stream may just end
         } catch (Throwable t) {
+            tcpNote = "adbd did not accept tcpip (" + t.getMessage() + ")";
         } finally {
             try { if (st != null) st.close(); } catch (Throwable t) { }
         }
         try { m.disconnect(); } catch (Throwable t) { }
+        return sent;
+    }
+
+    /* USB debugging switch in Developer options; readable by any app */
+    boolean usbDebuggingOn() {
+        try { return Settings.Global.getInt(getContentResolver(), Settings.Global.ADB_ENABLED, 0) == 1; }
+        catch (Throwable t) { return false; }
     }
 
     boolean connectAdb(AdbManager m) throws Exception {
         final boolean tcp = tcpOn();
         final int port = prefs.getInt("tcpport", 5555);
-        if (tcp && connectTcp(m, port, 2)) return true;
+        viaTcp = false;
+        tcpNote = "";
+        if (tcp && connectTcp(m, port, 2)) { viaTcp = true; return true; }
         if (!m.autoConnect(this, 10000)) return false;
-        if (tcp) {
-            switchToTcp(m, port);
-            if (connectTcp(m, port, 8)) return true;
-            return m.autoConnect(this, 10000); // TCP did not come up: stay on Wireless debugging
+        if (!tcp) return true;
+        boolean sent = switchToTcp(m, port);
+        // adbd needs a few seconds to restart on the new port (8 tries x 0.5 s was too short on slower phones)
+        if (sent && connectTcp(m, port, 20)) {
+            viaTcp = true;
+            // While USB debugging is on, Android keeps adbd (and so the TCP port) alive even when Wi-Fi is turned off.
+            // Done now, over the TCP connection, and only when it is still off.
+            if (!usbDebuggingOn()) {
+                shell(m, "settings put global adb_enabled 1");
+                if (!m.isConnected() && !connectTcp(m, port, 10)) {
+                    viaTcp = false;
+                    tcpNote = "the connection dropped after switching USB debugging on";
+                    return m.autoConnect(this, 10000);
+                }
+            }
+            return true;
         }
-        return true;
+        if (sent && tcpNote.isEmpty()) {
+            tcpNote = "adbd restarted but port " + port + " did not open. If Android shows an \"Allow USB debugging?\" pop-up, tap Always allow.";
+        }
+        return m.autoConnect(this, 10000); // TCP did not come up: stay on Wireless debugging
     }
 
     /* TCP mode switched on / port changed: reconnect now, so adbd moves to the TCP port. */
@@ -905,9 +931,13 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
                 }
             }
             final boolean fok = ok;
-            final String fmsg = msg;
-            h.post(() -> Toast.makeText(this, fok ? "TCP mode on, port " + port
-                    : "TCP mode failed" + (fmsg.isEmpty() ? "" : ": " + fmsg), Toast.LENGTH_LONG).show());
+            final boolean ftcp = viaTcp;
+            final String fmsg = msg.isEmpty() ? tcpNote : msg;
+            // "on" only when the connection really is the TCP one (before: any Wireless connection said "TCP mode on")
+            h.post(() -> Toast.makeText(this, !fok ? "TCP mode failed" + (fmsg.isEmpty() ? "" : ": " + fmsg)
+                    : ftcp ? "TCP mode on, port " + port
+                    : "TCP mode did not start, still using Wireless debugging" + (fmsg.isEmpty() ? "" : ": " + fmsg),
+                    Toast.LENGTH_LONG).show());
         }).start();
     }
 
@@ -1111,7 +1141,11 @@ canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
         if (!autoQueueRemove(key)) return; // already handled by another call
         if (!silent) return;
         markInstalling(key);
-        h.post(() -> install(key, local));
+        h.post(() -> {
+            push(true);        // tell the page "installing" first ...
+            ensurePolling();   // ... and keep telling it until the install ends
+            install(key, local);
+        });
     }
 
     /* ---------- install ---------- */
